@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+</head>
+<body>
+<title>Ava Lab</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&display=swap">
+<style>
+  /* Layout: palco grande para o efeito em foco, grade de candidatos abaixo, controles fixos no rodapé. Tema único, escuro (neon precisa de preto). */
+  :root {
+    --bg: #07070d; --bg-2: #0f0f18; --tile: #14141f; --line: #23233a;
+    --fg: #ecebf5; --fg-2: #9b99b4; --fg-3: #5c5a74;
+    --accent: #7b6cff; --ok: #4ed48a; --warn: #f2b23d;
+    --font-display: "Instrument Serif", Georgia, serif;
+    --font-ui: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 14px; line-height: 1.45; }
+  .wrap { padding-inline: 16px; padding-block: 16px 110px; max-width: 1180px; margin: 0 auto; }
+  header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 12px; }
+  h1 { font: 400 30px/1.1 var(--font-display); margin: 0; }
+  h1 em { font-style: italic; color: var(--accent); }
+  .meta { color: var(--fg-2); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+  .stage { position: relative; border: 1px solid var(--line); border-radius: 18px; background: radial-gradient(ellipse at 50% 45%, #10102a 0%, var(--bg) 65%); overflow: hidden; }
+  .stage.light { background: #e9eaf0; }
+  .stage.checker { background-image: linear-gradient(45deg, #dcdde6 25%, transparent 25%, transparent 75%, #dcdde6 75%), linear-gradient(45deg, #dcdde6 25%, transparent 25%, transparent 75%, #dcdde6 75%); background-size: 28px 28px; background-position: 0 0, 14px 14px; }
+  #big { width: 100%; height: min(72vmin, 560px); }
+  .stage .label { position: absolute; left: 14px; top: 12px; display: flex; gap: 8px; align-items: center; }
+  .stage .label b { font: italic 20px var(--font-display); color: var(--fg); }
+  .stage.light .label b, .stage.light .status { color: #1a1a2a; }
+  .stage .status { position: absolute; right: 14px; top: 12px; display: inline-flex; align-items: center; gap: 8px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: rgba(10,10,20,0.55); font-size: 12px; color: var(--fg-2); backdrop-filter: blur(6px); }
+  .stage .status i { width: 7px; height: 7px; border-radius: 50%; background: var(--fg-3); }
+  .status[data-s="listening"] i { background: var(--ok); } .status[data-s="thinking"] i { background: var(--warn); } .status[data-s="speaking"] i { background: #ff5fa8; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+  .card { position: relative; border: 1px solid var(--line); border-radius: 14px; background: var(--tile); overflow: hidden; cursor: pointer; padding: 0; text-align: left; color: var(--fg); aspect-ratio: 1; }
+  .card.light { background: #e9eaf0; }
+  .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .card.active { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+  .card .orb { position: absolute; inset: 0; }
+  .card .name { position: absolute; left: 10px; bottom: 8px; font-size: 12px; color: var(--fg-2); background: rgba(8,8,16,0.6); padding: 2px 8px; border-radius: 999px; }
+  .card .desc { display: none; }
+
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px)); background: color-mix(in srgb, var(--bg-2) 88%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--tile); }
+  .seg button { background: transparent; border: 0; color: var(--fg-2); padding: 8px 12px; font: 500 13px var(--font-ui); cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--line); color: var(--fg); }
+  .seg button:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .btn { background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 9px 14px; font: 600 13px var(--font-ui); cursor: pointer; }
+  .btn.ghost { background: var(--tile); color: var(--fg); border: 1px solid var(--line); }
+  .btn[disabled] { opacity: 0.5; cursor: default; }
+  .desc-line { color: var(--fg-2); font-size: 13px; margin: 10px 0 0; max-width: 70ch; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
+  .chip { background: var(--tile); border: 1px solid var(--line); color: var(--fg-2); border-radius: 999px; padding: 6px 12px; font: 500 12px var(--font-ui); cursor: pointer; }
+  .chip[aria-pressed="true"] { color: var(--fg); border-color: var(--accent); }
+  .chip:focus-visible, .sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .sw { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; box-shadow: inset 0 0 0 2px var(--bg); }
+  .sw[aria-pressed="true"] { border-color: var(--fg); }
+  .swatches .lbl { color: var(--fg-3); font-size: 12px; margin-right: 4px; }
+  .picker { display: inline-grid; gap: 8px; margin-top: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--tile); max-width: 100%; }
+  .picker canvas { display: block; border-radius: 8px; cursor: crosshair; touch-action: none; max-width: 100%; }
+  .pk-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-2); }
+  .pk-dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); }
+  .pk-meta code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--fg); }
+  .pk-hint { color: var(--fg-3); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1><em>Ava</em> Lab</h1>
+    <span class="meta">7 efeitos · paleta livre · clique para focar</span>
+  </header>
+
+  <section class="stage" id="stage">
+    <div class="label"><b id="bigName">Smith</b></div>
+    <div class="status" id="status" data-s="idle"><i></i><span id="statusText">ociosa</span></div>
+    <div id="big" aria-hidden="true"></div>
+  </section>
+  <p class="desc-line" id="bigDesc"></p>
+  <div class="extra" id="extra">
+    <div class="row" id="exprs" role="group" aria-label="Expressões"></div>
+    <div class="row" role="group" aria-label="Cor dos olhos"><span class="lbl" style="color:var(--fg-3);font-size:12px">Olhos</span><button class="chip" data-eye="#fff6fa" aria-pressed="true">brancos</button><button class="chip" data-eye="#121016" aria-pressed="false">pretos</button></div>
+  </div>
+  <div class="row swatches" id="swatches" role="group" aria-label="Cores"></div>
+  <div class="picker" id="picker" aria-label="Paleta: clique e arraste">
+    <canvas id="sl" width="220" height="130" aria-label="Saturação e luminosidade"></canvas>
+    <canvas id="hue" width="220" height="16" aria-label="Matiz"></canvas>
+    <div class="pk-meta"><span class="pk-dot" id="pkDot"></span><code id="pkHex">#ff2f93</code><span class="pk-hint">arraste nas duas áreas</span></div>
+  </div>
+
+  <section class="grid" id="grid" aria-label="Efeitos"></section>
+</div>
+
+<div class="bar" role="toolbar" aria-label="Controles">
+  <div class="seg" role="group" aria-label="Estado">
+    <button data-state="idle" aria-pressed="true">Ociosa</button>
+    <button data-state="listening" aria-pressed="false">Ouvindo</button>
+    <button data-state="thinking" aria-pressed="false">Pensando</button>
+    <button data-state="speaking" aria-pressed="false">Falando</button>
+    <button data-state="sleeping" aria-pressed="false">Dormindo</button>
+  </div>
+  <button class="btn ghost" id="talk">Simular fala</button>
+  <button class="btn" id="mic">Microfone</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="plasma-orb.js"></script>
+<script src="glass-orb.js"></script>
+<script src="dots-orb.js"></script>
+<script src="jelly-orb.js"></script>
+<script>
+(function () {
+  var EFFECTS = [
+    { id: 'jelly',  name: 'Gel',          light: true, bg: 'pink', make: function (el, col) { return JellyOrb.create(el, { color: col || '#ff2f93' }); }, desc: 'Esfera de gel brilhante com dois olhos brancos simétricos que mudam de forma: nove expressões, piscar, micro-olhares e squash ao falar. Escolha a cor nas bolinhas ou arraste na paleta.' },
+    { id: 'smith',  name: 'Smith',        light: false, make: function (el) { return PlasmaOrb.create(el, {}); }, desc: 'Núcleo de luz líquida com veias brancas, anéis de energia inclinados e poeira orbitando. Na fala, cada pico de voz emite uma onda que se expande.' },
+    { id: 'holo',   name: 'Bolha holográfica', light: true, make: function (el) { return GlassOrb.create(el, { iridescence: 1.0 }); }, desc: 'Vidro líquido transparente com filme fino iridescente: as bandas de cor escorrem com as dobras. Pensado para fundo claro.' },
+    { id: 'dark',   name: 'Vidro escuro', light: false, make: function (el) { return GlassOrb.create(el, { iridescence: 0.7, dark: true, accent: '#7ad7ff' }); }, desc: 'A mesma bolha sobre estúdio escuro: reflexos frios, iridescência contida, dobras internas em cáustica.' },
+    { id: 'dots',   name: 'Pontos',       light: false, make: function (el) { return DotsOrb.create(el, { style: 'dots' }); }, desc: 'Malha de meio-tom monocromática: dezenas de milhares de pontos sobre a superfície líquida, brilho pela luz e pela borda.' },
+    { id: 'wire',   name: 'Wireframe neon', light: false, make: function (el) { return DotsOrb.create(el, { style: 'wire', gradient: ['#4c8bff', '#ff3bd6'] }); }, desc: 'Grade de paralelos e meridianos em gradiente azul → magenta, com pontos nos vértices e brilho aditivo.' },
+    { id: 'waves',  name: 'Ondas',        light: false, make: function (el) { return DotsOrb.create(el, { style: 'waves', gradient: ['#5df2e6', '#ff4fd8'] }); }, desc: 'Só os paralelos, ondulando como um campo de linhas dentro de um aro neon ciano → magenta.' },
+  ];
+  // paleta: cor do orbe + fundo claro combinando (usado nos efeitos de fundo claro)
+  var COLORS = [
+    { name: 'Rosa', c: '#ff2f93', bg: '#ffd6e8' }, { name: 'Coral', c: '#ff5a4e', bg: '#ffe0d6' }, { name: 'Laranja', c: '#ff8a2a', bg: '#ffe6cc' },
+    { name: 'Âmbar', c: '#ffb020', bg: '#fff0c8' }, { name: 'Lima', c: '#8fd63a', bg: '#e9f7cf' }, { name: 'Menta', c: '#28d0a8', bg: '#d2f5ec' },
+    { name: 'Azul', c: '#3a8bff', bg: '#d6e6ff' }, { name: 'Violeta', c: '#8a5bff', bg: '#e4dcff' }, { name: 'Lavanda', c: '#c77dff', bg: '#f0dcff' },
+    { name: 'Grafite', c: '#3a3a4a', bg: '#e3e3ea' }
+  ];
+  var color = COLORS[0];
+  var LABEL = { idle: 'ociosa', listening: 'ouvindo', thinking: 'pensando', speaking: 'falando', sleeping: 'dormindo' };
+  var grid = document.getElementById('grid'), stage = document.getElementById('stage'), bigEl = document.getElementById('big');
+  var orbs = [], big = null, bigId = null, state = 'idle';
+
+  EFFECTS.forEach(function (fx) {
+    var card = document.createElement('button'); card.className = 'card' + (fx.light ? ' light' : ''); card.type = 'button'; card.dataset.id = fx.id; card.setAttribute('aria-label', fx.name);
+    var holder = document.createElement('div'); holder.className = 'orb'; card.appendChild(holder);
+    var name = document.createElement('span'); name.className = 'name'; name.textContent = fx.name; card.appendChild(name);
+    grid.appendChild(card);
+    var orb = fx.make(holder, color.c); orbs.push(orb); orb._fx = fx;
+    card.addEventListener('click', function () { focus(fx); });
+  });
+
+  function focus(fx) {
+    if (bigId === fx.id) return;
+    if (big) { big.dispose(); big = null; }
+    bigId = fx.id;
+    stage.classList.toggle('light', fx.light); stage.classList.toggle('checker', fx.id === 'holo');
+    document.getElementById('bigName').textContent = fx.name; document.getElementById('bigDesc').textContent = fx.desc;
+    Array.prototype.forEach.call(grid.children, function (c) { c.classList.toggle('active', c.dataset.id === fx.id); });
+    big = fx.make(bigEl, color.c); big.setState(state); if (micStream) big.attachStream(micStream); if (big.setEyeColor && typeof eyeColor !== 'undefined') big.setEyeColor(eyeColor);
+    stage.style.background = fx.id === 'jelly' ? color.bg : '';
+    extra.hidden = fx.id !== 'jelly';
+  }
+  function all(fn) { orbs.forEach(fn); if (big) fn(big); }
+
+  var status = document.getElementById('status'), statusText = document.getElementById('statusText');
+  var segBtns = Array.prototype.slice.call(document.querySelectorAll('.seg button'));
+  function setState(s) {
+    state = s; all(function (o) { o.setState(s); });
+    status.dataset.s = s; statusText.textContent = LABEL[s];
+    segBtns.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.state === s)); });
+  }
+  segBtns.forEach(function (b) { b.addEventListener('click', function () { setState(b.dataset.state); }); });
+
+  // fala simulada: envelope de sílabas + speechSynthesis quando houver
+  var LINES = ['Oi, Jean. Sou a Ava. Hoje você tem três reuniões e um RFC esperando revisão.', 'O lead time mediano dos PRs caiu para dois dias nesta semana.', 'Quer que eu prepare o brief do encontro de engenharia?'];
+  var speaking = false, envTimer = 0, li = 0, prev = 'idle';
+  document.getElementById('talk').addEventListener('click', function () {
+    if (speaking) return;
+    speaking = true; prev = state; setState('speaking');
+    var text = LINES[li++ % LINES.length], t0 = performance.now(), dur = 2600 + text.length * 55;
+    (function env() {
+      var t = (performance.now() - t0) / 1000;
+      var syl = Math.max(0, Math.sin(t * 11) * 0.5 + Math.sin(t * 17.3) * 0.3 + Math.sin(t * 3.1) * 0.2 + 0.35);
+      var word = (Math.sin(t * 2.4) > -0.6) ? 1 : 0.15;
+      all(function (o) { o.setLevel(Math.min(1, syl * word * 1.1)); });
+      envTimer = requestAnimationFrame(env);
+    })();
+    function done() { cancelAnimationFrame(envTimer); all(function (o) { o.setLevel(0); }); speaking = false; setState(micStream ? 'listening' : (prev === 'speaking' ? 'idle' : prev)); }
+    if (window.speechSynthesis && window.SpeechSynthesisUtterance) {
+      try {
+        var u = new SpeechSynthesisUtterance(text); u.lang = 'pt-BR'; u.rate = 1.02;
+        var v = speechSynthesis.getVoices().filter(function (v) { return /pt[-_]BR/i.test(v.lang); })[0]; if (v) u.voice = v;
+        u.onend = done; u.onerror = done; speechSynthesis.cancel(); speechSynthesis.speak(u);
+        setTimeout(function () { if (speaking) done(); }, dur + 4000); return;
+      } catch (e) {}
+    }
+    setTimeout(done, dur);
+  });
+
+  // microfone: um stream para todos os orbes (nível); VAD simples para trocar ouvindo/pensando
+  var micStream = null, micBtn = document.getElementById('mic');
+  micBtn.addEventListener('click', function () {
+    if (micStream) { micStream.getTracks().forEach(function (t) { t.stop(); }); micStream = null; all(function (o) { o.detachAudio(); }); micBtn.textContent = 'Microfone'; setState('idle'); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { micBtn.disabled = true; micBtn.textContent = 'Sem microfone aqui'; return; }
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then(function (stream) {
+      micStream = stream; all(function (o) { o.attachStream(stream); }); micBtn.textContent = 'Desligar microfone'; setState('listening');
+      var ctx = new (window.AudioContext || window.webkitAudioContext)(), an = ctx.createAnalyser(); an.fftSize = 512; ctx.createMediaStreamSource(stream).connect(an);
+      var buf = new Float32Array(512), lastVoice = 0, heard = false;
+      (function poll() {
+        if (!micStream) return; requestAnimationFrame(poll);
+        an.getFloatTimeDomainData(buf); var s = 0; for (var i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+        var rms = Math.sqrt(s / buf.length), now = performance.now();
+        if (rms > 0.02) { lastVoice = now; heard = true; if (state !== 'listening' && !speaking) setState('listening'); }
+        else if (heard && now - lastVoice > 1200 && state === 'listening' && !speaking) { heard = false; setState('thinking'); setTimeout(function () { document.getElementById('talk').click(); }, 900); }
+      })();
+    }).catch(function () { micBtn.disabled = true; micBtn.textContent = 'Microfone bloqueado aqui'; });
+  });
+
+  // expressões (só no Gel)
+  var extra = document.getElementById('extra'), exprs = document.getElementById('exprs');
+  var EXPR_PT = { neutral: 'neutra', wide: 'atenta', think: 'pensativa', happy: 'feliz', surprised: 'surpresa', sleepy: 'sonolenta', wink: 'piscadinha', sad: 'triste', suspicious: 'desconfiada' };
+  Object.keys(EXPR_PT).forEach(function (k) {
+    var b = document.createElement('button'); b.className = 'chip'; b.textContent = EXPR_PT[k]; b.setAttribute('aria-pressed', 'false'); b.dataset.k = k;
+    b.addEventListener('click', function () {
+      Array.prototype.forEach.call(exprs.children, function (c) { c.setAttribute('aria-pressed', String(c === b)); });
+      all(function (o) { if (o.setExpression) o.setExpression(k, 4000); });
+      setTimeout(function () { b.setAttribute('aria-pressed', 'false'); }, 4000);
+    });
+    exprs.appendChild(b);
+  });
+  // cor dos olhos do Gel
+  Array.prototype.forEach.call(document.querySelectorAll('[data-eye]'), function (b) {
+    b.addEventListener('click', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('[data-eye]'), function (c) { c.setAttribute('aria-pressed', String(c === b)); });
+      all(function (o) { if (o.setEyeColor) o.setEyeColor(b.dataset.eye); });
+      eyeColor = b.dataset.eye;
+    });
+  });
+  var eyeColor = '#fff6fa';
+  // cores: aplica em todos os efeitos; fundo claro acompanha
+  var sw = document.getElementById('swatches'); var lbl = document.createElement('span'); lbl.className = 'lbl'; lbl.textContent = 'Cor'; sw.appendChild(lbl);
+  COLORS.forEach(function (cl, i) {
+    var b = document.createElement('button'); b.className = 'sw'; b.style.background = cl.c; b.title = cl.name; b.setAttribute('aria-label', cl.name); b.setAttribute('aria-pressed', String(i === 0));
+    b.addEventListener('click', function () {
+      color = cl; Array.prototype.forEach.call(sw.querySelectorAll('.sw'), function (c) { c.setAttribute('aria-pressed', String(c === b)); });
+      all(function (o) { o.setColor(cl.c); });
+      if (bigId === 'jelly') stage.style.background = cl.bg;
+      Array.prototype.forEach.call(grid.children, function (c) { if (c.dataset.id === 'jelly') c.style.background = cl.bg; });
+    });
+    sw.appendChild(b);
+  });
+  Array.prototype.forEach.call(grid.children, function (c) { if (c.dataset.id === 'jelly') c.style.background = color.bg; });
+
+  // paleta livre: matiz (barra) + saturação/luminosidade (área); clique ou arraste
+  (function () {
+    var sl = document.getElementById('sl'), hue = document.getElementById('hue'), hex = document.getElementById('pkHex'), dot = document.getElementById('pkDot');
+    var H = 335, S = 1.0, L = 0.59;
+    function hslToHex(h, s, l) { var c = new THREE.Color(); c.setHSL(h / 360, s, l); return '#' + c.getHexString(); }
+    function drawHue() {
+      var g = hue.getContext('2d'), grd = g.createLinearGradient(0, 0, hue.width, 0);
+      for (var i = 0; i <= 12; i++) grd.addColorStop(i / 12, 'hsl(' + (i * 30) + ',100%,50%)');
+      g.fillStyle = grd; g.fillRect(0, 0, hue.width, hue.height);
+      var x = H / 360 * hue.width; g.strokeStyle = '#fff'; g.lineWidth = 2; g.strokeRect(x - 3, 1, 6, hue.height - 2);
+    }
+    function drawSL() {
+      var g = sl.getContext('2d'), w = sl.width, h = sl.height;
+      g.fillStyle = 'hsl(' + H + ',100%,50%)'; g.fillRect(0, 0, w, h);
+      var gw = g.createLinearGradient(0, 0, w, 0); gw.addColorStop(0, 'rgba(255,255,255,1)'); gw.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gw; g.fillRect(0, 0, w, h);
+      var gb = g.createLinearGradient(0, 0, 0, h); gb.addColorStop(0, 'rgba(0,0,0,0)'); gb.addColorStop(1, 'rgba(0,0,0,1)'); g.fillStyle = gb; g.fillRect(0, 0, w, h);
+      // posição atual (HSV a partir de HSL)
+      var v = L + S * Math.min(L, 1 - L), sv = v === 0 ? 0 : 2 * (1 - L / v);
+      var x = sv * w, y = (1 - v) * h;
+      g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2); g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke(); g.beginPath(); g.arc(x, y, 7, 0, Math.PI * 2); g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = 1; g.stroke();
+    }
+    function apply() {
+      var c = hslToHex(H, S, L); hex.textContent = c; dot.style.background = c;
+      color = { name: 'custom', c: c, bg: hslToHex(H, Math.min(1, S), 0.92) };
+      all(function (o) { o.setColor(c); });
+      if (bigId === 'jelly') stage.style.background = color.bg;
+      Array.prototype.forEach.call(grid.children, function (k) { if (k.dataset.id === 'jelly') k.style.background = color.bg; });
+      Array.prototype.forEach.call(sw.querySelectorAll('.sw'), function (k) { k.setAttribute('aria-pressed', 'false'); });
+    }
+    function pick(el, ev, fn) {
+      var r = el.getBoundingClientRect(), x = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), y = Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height));
+      fn(x, y); drawHue(); drawSL(); apply();
+    }
+    function drag(el, fn) {
+      var down = false;
+      el.addEventListener('pointerdown', function (e) { down = true; el.setPointerCapture(e.pointerId); pick(el, e, fn); });
+      el.addEventListener('pointermove', function (e) { if (down) pick(el, e, fn); });
+      el.addEventListener('pointerup', function () { down = false; }); el.addEventListener('pointercancel', function () { down = false; });
+    }
+    drag(hue, function (x) { H = x * 360; });
+    drag(sl, function (x, y) { var v = 1 - y, sv = x; L = v * (1 - sv / 2); S = (L === 0 || L === 1) ? 0 : (v - L) / Math.min(L, 1 - L); });
+    drawHue(); drawSL();
+  })();
+
+  focus(EFFECTS[0]);
+})();
+</script>
+
+</body>
+</html>

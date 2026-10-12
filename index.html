@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+</head>
+<body>
+<title>Ava Orb</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&display=swap">
+<style>
+  /* Layout: palco escuro; o orbe é o único ponto de luz. Trilho de avatares à esquerda, controles discretos embaixo. */
+  :root {
+    --bg: #0e0c11; --bg-2: #15121b; --tile: #1c1824; --line: #2a2434;
+    --fg: #ece6f2; --fg-2: #9a90aa; --fg-3: #5f5670;
+    --accent: #e0527a; --ok: #4ed48a; --warn: #f2b23d;
+    --font-display: "Instrument Serif", Georgia, serif;
+    --font-ui: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg: #f4f0f6; --bg-2: #ebe6ef; --tile: #ffffff; --line: #ddd5e4; --fg: #1a1522; --fg-2: #6a6078; --fg-3: #a79db5; color-scheme: light; } }
+  :root[data-theme="light"] { --bg: #f4f0f6; --bg-2: #ebe6ef; --tile: #ffffff; --line: #ddd5e4; --fg: #1a1522; --fg-2: #6a6078; --fg-3: #a79db5; color-scheme: light; }
+
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 14px; line-height: 1.45; }
+  .app { min-height: 100%; display: grid; grid-template-columns: 64px 1fr; }
+  @media (max-width: 640px) { .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } }
+
+  /* trilho de agentes */
+  .rail { background: var(--bg-2); border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 12px; padding-block: 16px; }
+  @media (max-width: 640px) { .rail { flex-direction: row; justify-content: center; border-right: 0; border-bottom: 1px solid var(--line); padding-inline: 16px; } }
+  .tile { position: relative; width: 44px; height: 44px; border-radius: 12px; background: var(--tile); border: 1px solid var(--line); overflow: hidden; cursor: pointer; padding: 0; }
+  .tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tile.active { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .tile .orb { position: absolute; inset: -6px; }
+  .tile .dot { position: absolute; right: 4px; bottom: 4px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--tile); background: var(--fg-3); }
+  .tile .dot.on { background: var(--ok); }
+  .tile .dot.busy { background: var(--warn); }
+
+  /* palco */
+  .stage { display: grid; grid-template-rows: auto 1fr auto; padding-inline: 16px; padding-block: 16px 20px; gap: 12px; min-width: 0; }
+  header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; }
+  h1 { font: 400 28px/1.1 var(--font-display); margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+  h1 em { font-style: italic; color: var(--accent); }
+  .meta { color: var(--fg-2); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .center { display: grid; place-items: center; align-content: center; gap: 8px; }
+  #big { width: min(62vmin, 420px); aspect-ratio: 1; max-width: 100%; }
+  .status { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg-2); font-size: 13px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
+  .status i { width: 7px; height: 7px; border-radius: 50%; background: var(--fg-3); }
+  .status[data-s="listening"] i { background: var(--ok); } .status[data-s="thinking"] i { background: var(--warn); } .status[data-s="speaking"] i { background: var(--accent); }
+  .caption { font: italic 17px/1.3 var(--font-display); color: var(--fg-2); text-align: center; max-width: 36ch; min-height: 1.4em; }
+
+  /* controles */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg-2); }
+  .seg button { background: transparent; border: 0; color: var(--fg-2); padding: 8px 12px; font: 500 13px var(--font-ui); cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--tile); color: var(--fg); }
+  .seg button:focus-visible, .btn:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .btn { background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 9px 14px; font: 600 13px var(--font-ui); cursor: pointer; }
+  .btn.ghost { background: var(--bg-2); color: var(--fg); border: 1px solid var(--line); }
+  .btn[disabled] { opacity: 0.5; cursor: default; }
+  label.color { display: inline-flex; align-items: center; gap: 8px; color: var(--fg-2); font-size: 13px; }
+  input[type=color] { width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 8px; padding: 0; background: var(--bg-2); cursor: pointer; }
+  .hint { grid-column: 1 / -1; text-align: center; color: var(--fg-3); font-size: 12px; }
+  .hint code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--fg-2); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app">
+  <nav class="rail" aria-label="Agentes">
+    <button class="tile active" data-color="#c8395f" data-name="Ava" data-eyes="slits" aria-label="Ava, ativa"><div class="orb"></div><span class="dot on"></span></button>
+    <button class="tile" data-color="#f1f0ee" data-name="Scout" data-eyes="slits" aria-label="Scout, ocupada"><div class="orb"></div><span class="dot busy"></span></button>
+    <button class="tile" data-color="#ff6a3d" data-name="Lume" data-eyes="slits" aria-label="Lume, online"><div class="orb"></div><span class="dot on"></span></button>
+    <button class="tile" data-color="#7b4fe0" data-name="Vesper" data-eyes="slits" aria-label="Vesper, offline"><div class="orb"></div><span class="dot"></span></button>
+    <button class="tile" data-color="#3bbfa6" data-name="Juno" data-eyes="none" aria-label="Juno, online"><div class="orb"></div><span class="dot on"></span></button>
+  </nav>
+
+  <main class="stage">
+    <header>
+      <h1><em id="name">Ava</em>, assistente de voz</h1>
+      <span class="meta">Kognion · sem teclado, sem mouse</span>
+    </header>
+
+    <section class="center">
+      <div id="big" aria-hidden="true"></div>
+      <div class="status" id="status" data-s="idle" role="status" aria-live="polite"><i></i><span id="statusText">ociosa</span></div>
+      <p class="caption" id="caption">Toque em “Ligar microfone” e fale com ela.</p>
+    </section>
+
+    <section class="controls" aria-label="Controles da demonstração">
+      <div class="seg" role="group" aria-label="Estado">
+        <button data-state="idle" aria-pressed="true">Ociosa</button>
+        <button data-state="listening" aria-pressed="false">Ouvindo</button>
+        <button data-state="thinking" aria-pressed="false">Pensando</button>
+        <button data-state="speaking" aria-pressed="false">Falando</button>
+        <button data-state="sleeping" aria-pressed="false">Dormindo</button>
+      </div>
+      <button class="btn" id="mic">Ligar microfone</button>
+      <button class="btn ghost" id="talk">Simular fala da Ava</button>
+      <label class="color">Cor <input type="color" id="color" value="#c8395f"></label>
+      <p class="hint">No seu app: <code>orb.attachMic()</code> enquanto ouve, <code>orb.attachAudio(audioEl)</code> na fala do agente, <code>orb.setState(...)</code> a cada virada de turno.</p>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="fuzzy-orb.js"></script>
+<script>
+(function () {
+  var big = FuzzyOrb.create(document.getElementById('big'), { color: '#c8395f', shells: 30, furLength: 0.17 });
+  var tiles = Array.prototype.slice.call(document.querySelectorAll('.tile'));
+  var small = tiles.map(function (t) {
+    var dot = t.querySelector('.dot');
+    var st = dot.classList.contains('on') ? 'idle' : dot.classList.contains('busy') ? 'thinking' : 'sleeping';
+    return FuzzyOrb.create(t.querySelector('.orb'), { color: t.dataset.color, shells: 14, furLength: 0.2, density: 7, eyes: t.dataset.eyes, state: st });
+  });
+
+  var LABEL = { idle: 'ociosa', listening: 'ouvindo', thinking: 'pensando', speaking: 'falando', sleeping: 'dormindo' };
+  var status = document.getElementById('status'), statusText = document.getElementById('statusText');
+  var segBtns = Array.prototype.slice.call(document.querySelectorAll('.seg button'));
+  var manual = false;
+  function setState(s, fromUser) {
+    big.setState(s);
+    status.dataset.s = s; statusText.textContent = LABEL[s];
+    segBtns.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.state === s)); });
+    if (fromUser) manual = true;
+  }
+  segBtns.forEach(function (b) { b.addEventListener('click', function () { setState(b.dataset.state, true); manual = b.dataset.state !== 'idle'; }); });
+
+  var colorIn = document.getElementById('color');
+  colorIn.addEventListener('input', function () { big.setColor(colorIn.value); });
+  tiles.forEach(function (t) {
+    t.addEventListener('click', function () {
+      tiles.forEach(function (x) { x.classList.remove('active'); }); t.classList.add('active');
+      colorIn.value = t.dataset.color.length === 7 ? t.dataset.color : '#c8395f';
+      big.setColor(t.dataset.color); document.getElementById('name').textContent = t.dataset.name;
+    });
+  });
+
+  // Microfone: VAD simples por energia — fala => "ouvindo"; silêncio por 1,2 s => "pensando" => resposta simulada.
+  var micBtn = document.getElementById('mic'), caption = document.getElementById('caption');
+  var micOn = false, vadTimer = 0, heard = false, pollTimer = 0;
+  micBtn.addEventListener('click', function () {
+    if (micOn) { big.detachAudio(); micOn = false; micBtn.textContent = 'Ligar microfone'; cancelAnimationFrame(pollTimer); setState('idle'); return; }
+    big.attachMic().then(function (stream) {
+      micOn = true; micBtn.textContent = 'Desligar microfone'; caption.textContent = 'Pode falar. Ela escuta, pensa e responde.';
+      setState('listening');
+      // VAD simples da demo, no mesmo stream que o orbe já usa para medir o nível
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var an = ctx.createAnalyser(); an.fftSize = 512; ctx.createMediaStreamSource(stream).connect(an);
+      var buf = new Float32Array(512), lastVoice = 0;
+      (function poll() {
+        pollTimer = requestAnimationFrame(poll);
+        an.getFloatTimeDomainData(buf); var s = 0; for (var i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+        var rms = Math.sqrt(s / buf.length), now = performance.now();
+        if (rms > 0.02) { lastVoice = now; heard = true; if (big.state !== 'listening' && !speaking) setState('listening'); }
+        else if (heard && now - lastVoice > 1200 && big.state === 'listening' && !speaking) { heard = false; setState('thinking'); setTimeout(speak, 900 + Math.random() * 900); }
+      })();
+    }).catch(function () {
+      caption.textContent = 'O microfone não está disponível aqui. Use os botões ou “Simular fala da Ava”.';
+      micBtn.disabled = true;
+    });
+  });
+
+  // Fala simulada: usa speechSynthesis (se houver) e um envelope de amplitude para animar o orbe.
+  var LINES = ['Oi, Jean. Hoje você tem três reuniões e um RFC esperando revisão.',
+               'O lead time mediano dos PRs caiu para dois dias nesta semana.',
+               'Quer que eu prepare o brief do encontro de engenharia?',
+               'Entendi. Vou abrir uma escalação e te aviso quando resolver.'];
+  var speaking = false, envTimer = 0, lineIdx = 0;
+  function speak() {
+    if (speaking) return;
+    speaking = true; setState('speaking');
+    var text = LINES[lineIdx++ % LINES.length]; caption.textContent = '“' + text + '”';
+    var dur = 2600 + text.length * 55, t0 = performance.now();
+    function env() {
+      var t = (performance.now() - t0) / 1000;
+      var syl = Math.max(0, Math.sin(t * 11) * 0.5 + Math.sin(t * 17.3) * 0.3 + Math.sin(t * 3.1) * 0.2 + 0.35);
+      var word = (Math.sin(t * 2.4) > -0.6) ? 1 : 0.15;
+      big.setLevel(Math.min(1, syl * word * 1.1));
+      envTimer = requestAnimationFrame(env);
+    }
+    env();
+    function done() { cancelAnimationFrame(envTimer); big.setLevel(0); speaking = false; setState(micOn ? 'listening' : 'idle'); if (!micOn) caption.textContent = 'Toque em “Ligar microfone” e fale com ela.'; }
+    if (window.speechSynthesis && window.SpeechSynthesisUtterance) {
+      try {
+        var u = new SpeechSynthesisUtterance(text); u.lang = 'pt-BR'; u.rate = 1.02;
+        var v = speechSynthesis.getVoices().filter(function (v) { return /pt[-_]BR/i.test(v.lang); })[0]; if (v) u.voice = v;
+        u.onend = done; u.onerror = done; speechSynthesis.cancel(); speechSynthesis.speak(u);
+        setTimeout(function () { if (speaking) done(); }, dur + 4000);   // segurança se onend não disparar
+        return;
+      } catch (e) {}
+    }
+    setTimeout(done, dur);
+  }
+  document.getElementById('talk').addEventListener('click', speak);
+
+  // Ciclo ambiente quando ninguém interage: mostra os estados de vez em quando.
+  setInterval(function () {
+    if (micOn || speaking || manual) return;
+    var s = big.state;
+    if (s === 'idle' && Math.random() < 0.35) { setState('thinking'); setTimeout(function () { if (!micOn && !speaking && !manual) setState('idle'); }, 2500); }
+  }, 6000);
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ava Voice</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #ffd9e3; --bg-2: #fff1f4; --tile: #ffffff; --line: #f3bfcb;
+    --fg: #2a1420; --fg-2: #8a5a70; --fg-3: #c08aa0;
+    --accent: #e8184f; --ok: #1fb978; --warn: #e09a00; --err: #d9304a;
+    --font-display: "Instrument Serif", Georgia, serif;
+    --font-ui: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color-scheme: light;
+  }
+  html, body { height: 100%; overflow: hidden; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 14px; line-height: 1.45; }
+  /* a página tem exatamente a altura da janela: o palco ocupa o que sobra e a transcrição rola dentro da própria coluna */
+  .app { height: 100%; display: grid; grid-template-columns: 1fr minmax(260px, 340px); grid-template-rows: 100%; }
+  @media (max-width: 760px) { .app { grid-template-columns: 1fr; grid-template-rows: 1fr 32vh; } }
+  .stage { display: grid; grid-template-rows: auto 1fr auto; padding-inline: 16px; padding-block: 12px 14px; gap: 6px; min-width: 0; min-height: 0; }
+  header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; }
+  h1 { font: 400 28px/1.1 var(--font-display); margin: 0; letter-spacing: -0.01em; }
+  h1 em { font-style: italic; color: var(--accent); }
+  .meta { color: var(--fg-2); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; font-variant-numeric: tabular-nums; }
+  .center { display: grid; grid-template-rows: 1fr auto; place-items: center; gap: 4px; min-height: 0; }
+  #orb { width: 100%; height: 100%; min-height: 0; }
+  .status { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg-2); font-size: 13px; color: var(--fg-2); }
+  .status i { width: 7px; height: 7px; border-radius: 50%; background: var(--fg-3); }
+  .status[data-s="listening"] i { background: var(--ok); } .status[data-s="thinking"] i { background: var(--warn); } .status[data-s="speaking"] i { background: var(--accent); }
+  .controls { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .mic { width: 44px; height: 44px; padding: 0; border: 0; background: transparent; color: var(--fg-3); cursor: pointer; display: grid; place-items: center; border-radius: 50%; transition: color .2s, transform .15s; }
+  .mic:hover { color: var(--fg-2); }
+  .mic:active { transform: scale(0.94); }
+  .mic:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .mic svg { width: 26px; height: 26px; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+  .mic svg .body { fill: currentColor; }
+  .mic svg .slash { stroke: var(--err); }
+  .mic[aria-pressed="true"] { color: var(--accent); }
+  .mic[aria-pressed="true"] svg .slash { display: none; }
+  .mic[data-busy="1"] { opacity: 0.5; cursor: progress; }
+  .hint { color: var(--fg-3); font-size: 12px; text-align: center; }
+
+  aside { border-left: 1px solid var(--line); background: var(--bg-2); display: grid; grid-template-rows: auto 1fr; min-height: 0; height: 100%; overflow: hidden; }
+  @media (max-width: 760px) { aside { border-left: 0; border-top: 1px solid var(--line); } }
+  aside h2 { margin: 0; padding: 14px 16px; font: 500 12px var(--font-ui); letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-2); border-bottom: 1px solid var(--line); }
+  #transcript { overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .turn { display: grid; grid-template-columns: 44px 1fr; gap: 8px; font-size: 14px; }
+  .turn .who { color: var(--fg-3); font-size: 12px; padding-top: 2px; }
+  .turn.ava .who { color: var(--accent); }
+  .turn .txt { white-space: pre-wrap; min-width: 0; }
+  .turn.note { display: block; color: var(--fg-3); font-size: 12px; font-style: italic; }
+  .turn.note.ok { color: var(--ok); } .turn.note.err { color: var(--err); font-style: normal; }
+</style>
+</head>
+<body>
+<div class="app">
+  <main class="stage">
+    <header>
+      <h1><em>Ava</em></h1>
+      <span class="meta" id="usage">0 s · US$ 0</span>
+    </header>
+    <section class="center">
+      <div id="orb" aria-hidden="true"></div>
+      <div class="status" id="status" data-s="sleeping" role="status" aria-live="polite"><i></i><span id="statusText">desconectada</span></div>
+    </section>
+    <section class="controls" aria-label="Controles">
+      <button class="mic" id="talk" aria-pressed="false" aria-label="Ligar microfone" title="Microfone">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect class="body" x="9" y="3" width="6" height="11" rx="3"/>
+          <path class="w" d="M6 11a6 6 0 0 0 12 0"/>
+          <path class="w" d="M12 17v4M9 21h6"/>
+          <path class="slash" d="M4 4l16 16"/>
+        </svg>
+      </button>
+    </section>
+  </main>
+  <aside>
+    <h2>Transcrição</h2>
+    <div id="transcript"></div>
+  </aside>
+</div>
+<audio id="remote" autoplay playsinline></audio>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="jelly-orb.js"></script>
+<script src="voice.js"></script>
+</body>
+</html>
