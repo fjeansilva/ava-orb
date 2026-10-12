@@ -1,0 +1,8 @@
+# Local credentials
+.env
+.env.*
+!.env.example
+
+# Dependencies and OS metadata
+node_modules/
+.DS_Store

@@ -3,14 +3,17 @@
  * Fluxo: mic → RTCPeerConnection → POST /api/session (o servidor troca o SDP) → áudio remoto + canal "oai-events".
  * Estados do orbe: full-duplex, então a prioridade é: Ava falando > usuário falando > backend trabalhando > ouvindo.
  */
+import { createExpressionController, connectExpressionEvents } from './expression-client.mjs';
+
 (function () {
   'use strict';
 
   var $ = function (id) { return document.getElementById(id); };
   var orb = JellyOrb.create($('orb'), { color: '#f71c5a', eyeColor: '#121016', headphones: true, backdrop: 'light' });
+  var expressions = createExpressionController(orb);
+  var expressionConnection = null;
   // Expressões: a Ava escolhe pelo que fala (léxico abaixo, por frase), e o backend pode pedir uma
   // explicitamente com a ferramenta set_expression. Estados de turno dão o padrão (atenta / pensativa / feliz).
-  var EXPR_PT = { neutra: 'neutral', atenta: 'wide', pensativa: 'think', feliz: 'happy', surpresa: 'surprised', sonolenta: 'sleepy', piscadinha: 'wink', triste: 'sad', desconfiada: 'suspicious' };
   var EXPR_RULES = [
     { re: /\b(haha|hehe|rs+|kkk+|que bom|ótimo|ótima|legal|maravilha|perfeito|parabéns|boa!|adorei|feliz|com prazer|claro!)\b/i, expr: 'happy' },
     { re: /\b(uau|nossa|sério\?|caramba|eita|não acredito|surpre|de verdade\?|jura\?)/i, expr: 'surprised' },
@@ -23,7 +26,7 @@
   ];
   var avaSentence = '';
   function expressFromText(text) {
-    for (var i = 0; i < EXPR_RULES.length; i++) if (EXPR_RULES[i].re.test(text)) { orb.setExpression(EXPR_RULES[i].expr, 2800); return EXPR_RULES[i].expr; }
+    for (var i = 0; i < EXPR_RULES.length; i++) if (EXPR_RULES[i].re.test(text)) { expressions.automatic(EXPR_RULES[i].expr, 2800); return EXPR_RULES[i].expr; }
     return null;
   }
   function onAvaDelta(delta) {
@@ -101,7 +104,7 @@
       case 'session.started':
         connected = true; sessionId = ev.session && ev.session.id || sessionId;
         note('Conectada. Pode falar.', 'ok'); reconcile(); break;
-      case 'session.input_transcript.delta': appendDelta('user', ev.delta); lastUser = performance.now(); if (/\b(obrigad|valeu|boa noite|tchau)\b/i.test(ev.delta)) orb.setExpression(/noite|tchau/i.test(ev.delta) ? 'sleepy' : 'happy', 2500); break;
+      case 'session.input_transcript.delta': appendDelta('user', ev.delta); lastUser = performance.now(); if (/\b(obrigad|valeu|boa noite|tchau)\b/i.test(ev.delta)) expressions.automatic(/noite|tchau/i.test(ev.delta) ? 'sleepy' : 'happy', 2500); break;
       case 'session.output_transcript.delta': appendDelta('ava', ev.delta); onAvaDelta(ev.delta); break;
       case 'session.delegation.created':
         // pendingDelegations++; reconcile();
@@ -115,7 +118,7 @@
       case 'session.closed':
         note('Sessão encerrada (' + (ev.reason || 'fim') + ').', 'dim'); teardown(); break;
       case 'error':
-        note('Erro: ' + (ev.error && (ev.error.message || ev.error.code) || JSON.stringify(ev)), 'err'); if (orb.setExpression) orb.setExpression('sad', 2500); break;
+        note('Erro: ' + (ev.error && (ev.error.message || ev.error.code) || JSON.stringify(ev)), 'err'); expressions.automatic('sad', 2500); break;
       default: break;
     }
   }
@@ -151,9 +154,7 @@
     try {
       if (name === 'set_expression') {
         var args2 = typeof args === 'string' ? JSON.parse(args || '{}') : (args || {});
-        var k = EXPR_PT[(args2.expression || '').toLowerCase()] || args2.expression;
-        if (!orb.EXPRESSIONS || orb.EXPRESSIONS.indexOf(k) < 0) return 'expressão inválida; use: ' + Object.keys(EXPR_PT).join(', ');
-        orb.setExpression(k, Math.min(15000, Math.max(800, args2.duration_ms || 3000)));
+        expressions.apply(args2);
         return 'ok: ' + (args2.expression);
       }
       if (name === 'get_local_time') {
@@ -203,6 +204,14 @@
       var data = await r.json();
       if (!r.ok || !data.sdp) throw new Error(data.error ? data.error + (data.detail ? ' — ' + JSON.stringify(data.detail).slice(0, 300) : '') : 'sem SDP de resposta');
       sessionId = data.id;
+      if (data.expressionBridge) {
+        expressionConnection = connectExpressionEvents({
+          sessionId: sessionId,
+          token: data.expressionBridge.token,
+          apply: expressions.apply,
+          onError: function (message) { note(message, 'err'); },
+        });
+      }
       await pc.setRemoteDescription({ type: 'answer', sdp: data.sdp });
       connected = true; reconcile(); meterLoop();
       delete $('talk').dataset.busy; $('talk').setAttribute('aria-pressed', 'true'); $('talk').setAttribute('aria-label', 'Desligar microfone');
@@ -211,6 +220,8 @@
     }
   }
   function teardown() {
+    if (expressionConnection) { expressionConnection.close(); expressionConnection = null; }
+    expressions.reset();
     connected = false; avaSpeaking = userSpeaking = false; pendingDelegations = 0;
     if (micStream) { micStream.getTracks().forEach(function (t) { t.stop(); }); micStream = null; }
     if (pc) { try { pc.close(); } catch (e) {} pc = null; }

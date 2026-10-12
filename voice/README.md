@@ -1,65 +1,83 @@
-# Ava Voice — conversa por voz com GPT-Live-1
+# Ava Voice — GPT-Live with a Pi backend
 
-Aba web, um usuário, sem teclado nem mouse depois do primeiro toque. O browser abre o microfone, faz WebRTC direto com a OpenAI e o orbe reage ao áudio dos dois lados; o servidor local só troca o SDP e guarda a chave.
+The browser handles microphone input, WebRTC audio, transcripts, and the Orb. The local server creates GPT-Live sessions with client delegation. The separate `ava-personal-assistant` application attaches to the Live session and runs delegated requests through Pi.
 
-## Rodar
+## Run
 
-```bash
-cd ava-orb/voice
-cp .env.example .env        # coloque OPENAI_API_KEY
-node --env-file=.env server.mjs
-# abra http://localhost:3000 e toque em "Conversar"
+Use Node.js 24 and a browser with microphone access. Create `voice/.env` with:
+
+```dotenv
+OPENAI_API_KEY=your_openai_api_key
+AVA_ORB_BRIDGE_TOKEN=your_random_private_bridge_token
 ```
 
-Requisitos: Node 22+, Chrome ou Safari, microfone. `localhost` já conta como contexto seguro para o mic.
+Generate a separate random bridge token with at least 32 bytes of entropy. A token was configured in the local environment during implementation; it is not committed. Never use the OpenAI API key as the bridge token. The browser receives neither value.
 
-Variáveis (todas opcionais, menos a chave):
+From this directory:
 
-| Variável | Padrão | Para quê |
+```sh
+node --env-file=.env server.mjs
+```
+
+Open `http://localhost:3000`, start a new voice call, and use its Live session ID when starting the Pi backend. From the `ava-personal-assistant` repository:
+
+```sh
+npm run build
+node --env-file=.env --env-file=/absolute/path/to/ava-orb/voice/.env dist/voice-preview.js "<LIVE_SESSION_ID>"
+```
+
+The first environment file supplies AVA's Pi model settings; the second supplies the Live API key and shared Orb bridge token. Configure Pi provider credentials separately through Pi. Both applications must use the corresponding `feat/orb-set-expression` implementation for the expression tool to work.
+
+| Variable | Default | Purpose |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | — | Chave do projeto; nunca vai ao browser |
-| `AVA_VOICE_MODEL` | `gpt-live-1` | Modelo de voz (camada full-duplex) |
-| `AVA_BACKEND_MODEL` | `gpt-5.6-terra` | Modelo de raciocínio delegado (troque por Astra para tarefas complexas) |
-| `AVA_VOICE` | `Vesper` | Uma das 12 vozes de estoque |
-| `PORT` | `3000` | Porta local |
+| `OPENAI_API_KEY` | Required | Creates the Live session; remains on the server. |
+| `AVA_VOICE_MODEL` | `gpt-live-1` | Voice model. |
+| `AVA_VOICE` | `Vesper` | Voice selection. |
+| `PORT` | `3000` | Local Orb HTTP port. |
+| `AVA_ORB_BRIDGE_TOKEN` | Unset | Shared server credential enabling expression commands. |
+| `AVA_ORB_BRIDGE_URL` | `http://127.0.0.1:3000` | Used by the Pi backend; change it if the Orb port changes. |
 
-## Como está montado
+The commented Responses-delegation example in `server.mjs` is inactive. `AVA_BACKEND_MODEL` does not select the current Pi model; use `AVA_MODEL_PROVIDER` and `AVA_MODEL_ID` in the assistant project. Web search and local-time tools are not enabled by this change.
 
-- `server.mjs` — `POST /api/session` recebe o SDP do browser e chama `POST /v1/live/sessions` com a configuração da sessão (modelo de voz, instruções de `prompt-ava.md`, delegação `responses` com `web_search` e a função `get_local_time`). Devolve o SDP de resposta e o id da sessão. Só aceita origem `localhost`.
-- `voice.js` — abre o mic, cria o `RTCPeerConnection` com o canal `oai-events`, espera o ICE, troca o SDP, toca o áudio remoto e escuta os eventos. Executa as function calls do backend (`response.output_item.done` → `response.item.create` → `response.create`).
-- `prompt-ava.md` — personalidade e regras de fala da Ava. Edite à vontade; o servidor lê a cada boot.
+## Expression flow
 
-### Mapa de eventos → estado do orbe
+```mermaid
+sequenceDiagram
+    participant Pi as Pi set_expression tool
+    participant Server as Local Orb server
+    participant Browser as Orb browser
+    Pi->>Server: Authenticated POST scoped to Live session
+    Server->>Browser: SSE expression command
+    Browser->>Browser: Apply orb.setExpression
+    Browser->>Server: Acknowledge using browser session credential
+    Server-->>Pi: Application confirmed
+```
 
-Full-duplex significa que os dois podem falar ao mesmo tempo, então o estado é resolvido por prioridade a cada frame:
+- `expression-bridge.mjs` routes commands to the browser that owns the Live session. An ephemeral browser credential is returned during session creation; the shared bridge token stays on the servers.
+- `expression-client.mjs` receives commands, validates the expression and duration, applies them, and acknowledges each request. It preserves an explicit expression against automatic speech expressions until the duration ends. A newer explicit command may replace it.
+- `voice.js` connects and closes the expression stream alongside the voice call. Its existing audio measurement and transcript rendering remain in place.
+- Pi continues to own the tool schema, model requests, tool execution, and conversation history. Application UI events are separate from GPT-Live events.
 
-| Sinal | Como é detectado | Estado |
-| --- | --- | --- |
-| Ava falando | RMS da faixa de áudio remota (WebRTC) acima de 0,015 nos últimos 350 ms | `speaking`, nível = amplitude |
-| Jean falando | RMS do microfone acima de 0,02 nos últimos 600 ms (e `session.input_transcript.delta`) | `listening`, nível = amplitude |
-| Backend trabalhando | `session.delegation.created` sem `response.completed` correspondente | `thinking` |
-| Conectada, em silêncio | `session.started` recebido | `listening` |
-| Desconectada | antes de conectar, `session.closed`, queda de conexão | `sleeping` |
+Allowed expressions: `neutra`, `atenta`, `pensativa`, `feliz`, `surpresa`, `sonolenta`, `piscadinha`, `triste`, and `desconfiada`. Duration defaults to 3000 ms and must be an integer from 800 to 15000 ms. Existing speech-based automatic expressions continue when no explicit expression is active.
 
-A transcrição usa `session.input_transcript.delta` e `session.output_transcript.delta`; a API não marca fim de turno, então o app agrupa por quem fala.
+To test by voice, say: "Ava, use set_expression para fazer uma piscadinha por cinco segundos."
 
-### Expressões do rosto
+Restart the server and reload the page after updating. Start a new voice session so its browser credential and expression stream are created. Without `AVA_ORB_BRIDGE_TOKEN`, voice still works but the bridge and Pi expression tool remain disabled.
 
-Três caminhos, do mais automático ao mais deliberado:
+## Failures and lifetime
 
-1. **Estado de turno** (padrão): ouvindo → atenta, pensando → pensativa, falando → feliz, desconectada → sonolenta.
-2. **Léxico da fala** (`EXPR_RULES` em `voice.js`): a cada frase da Ava, uma expressão temporária é escolhida pelas palavras ("que bom" → feliz, "uau" → surpresa, "deixa eu ver" → pensativa, "infelizmente" → triste, "será?" → desconfiada, "boa noite" → sonolenta, "fica entre nós" → piscadinha, frase terminando em "?" → atenta). Edite as regras à vontade.
-3. **Ferramenta `set_expression`** (declarada em `server.mjs`): o backend pode pedir uma expressão explícita com nome em português e duração. Útil para momentos precisos.
+An unattached browser session expires after 30 seconds. A disconnected stream removes its session and rejects outstanding requests. A command expires after 5 seconds without acknowledgement; the backend HTTP timeout is 6 seconds. Expired commands are not applied by the browser. Start a new voice call after an expression-connection failure.
 
-Erros de API viram "triste" e delegações viram "pensativa" automaticamente.
+Acknowledgement confirms a call to the Orb rendering API, not that the user saw the expression. A lost acknowledgement or aborted request can leave the result unknown. Neither side retries commands automatically, and abort cannot undo an already applied expression. This bridge is for the existing local, single-user application.
 
-## Próximos passos naturais
+## Local validation
 
-1. Trocar `get_local_time` pelas suas ferramentas de verdade: DataHub (`woba-datahub`), calendário, escalações. A assinatura entra em `server.mjs` (`tools`) e a execução em `voice.js` (`runTool`), ou num endpoint do servidor se precisar de segredo.
-2. Delegação `client` em vez de `responses` quando quiser o COS/Pi como backend: o app recebe `session.delegation.created`, roda seu agente e devolve com `session.commentary.append` (falar) ou `session.thinking.append` (contexto silencioso).
-3. Medir latência voz-a-voz: marque `lastUser` no último delta de entrada e o primeiro RMS remoto acima do limiar; alvo 800 ms, p95 abaixo de 1,2 s.
+From the Orb repository root:
 
-## Avisos
+```sh
+node --test voice/expression.test.mjs
+```
 
-- A API do GPT-Live é de setembro de 2026; nomes de campos foram tirados da documentação pública em outubro de 2026 (`developers.openai.com/api/docs/guides/live`). Se a OpenAI mudar algo, o erro aparece na transcrição com o corpo da resposta.
-- Criar uma sessão WebRTC cobra 15 s de voz na inicialização (creditados depois). A camada de voz custa US$ 0,05/min; o backend é cobrado à parte.
+Five tests cover authentication, session isolation, acknowledgement, invalid input, timeout, browser disconnect, duration, and browser cleanup. They use local HTTP/SSE and injected rendering callbacks, without calling OpenAI or requesting microphone access. A cross-project integration smoke test also exercised the Pi tool through the real local HTTP/SSE transport.
+
+On 2026-10-12, the owner followed the voice test above and confirmed that `set_expression` worked in a live call. This is owner-reported manual validation, separate from the automated checks.

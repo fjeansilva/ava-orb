@@ -5,6 +5,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { createExpressionBridge } from './expression-bridge.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
@@ -13,6 +14,7 @@ const VOICE_MODEL = process.env.AVA_VOICE_MODEL || 'gpt-live-1';
 const BACKEND_MODEL = process.env.AVA_BACKEND_MODEL || 'gpt-5.6-terra';
 const VOICE = process.env.AVA_VOICE || 'Vesper';
 const LIVE_URL = process.env.OPENAI_LIVE_URL || 'https://api.openai.com/v1/live/sessions';
+const expressionBridge = createExpressionBridge({ token: process.env.AVA_ORB_BRIDGE_TOKEN });
 
 if (!API_KEY) { console.error('OPENAI_API_KEY não definida. Crie um .env com OPENAI_API_KEY=sk-... e rode: node --env-file=.env server.mjs'); process.exit(1); }
 
@@ -22,6 +24,7 @@ const STATIC = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/index.html': ['index.html', 'text/html; charset=utf-8'],
   '/voice.js': ['voice.js', 'text/javascript; charset=utf-8'],
+  '/expression-client.mjs': ['expression-client.mjs', 'text/javascript; charset=utf-8'],
   '/jelly-orb.js': ['../jelly-orb.js', 'text/javascript; charset=utf-8'],
   '/plasma-orb.js': ['../plasma-orb.js', 'text/javascript; charset=utf-8'],
   '/glass-orb.js': ['../glass-orb.js', 'text/javascript; charset=utf-8'],
@@ -85,6 +88,8 @@ function sessionConfig(sdp) {
         "When the user explicitly asks to use or test the backend, delegate to it.",
         "Wait for the backend result before reporting its answer.",
         "Relay the result naturally without inventing actions or capabilities.",
+        "For requests to change your facial expression, delegate to the backend's set_expression tool.",
+        "Only report an expression change after the backend confirms it; do not repeatedly delegate the same change.",
       ].join("\n"),
       audio: {
         output: {
@@ -106,6 +111,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const origin = req.headers.origin;
   if (origin && origin !== `http://localhost:${PORT}` && origin !== `http://127.0.0.1:${PORT}`) return json(res, 403, { error: 'origem não permitida' });
+  if (await expressionBridge.handle(req, res)) return;
 
   if (req.method === 'POST' && url.pathname === '/api/session') {
     let sdp;
@@ -121,7 +127,8 @@ const server = http.createServer(async (req, res) => {
       if (!r.ok) { console.error('[live] erro', r.status, text.slice(0, 600)); return json(res, r.status, { error: 'falha ao criar sessão', status: r.status, detail: safeJson(text) }); }
       const data = safeJson(text);
       console.log('[live] sessão', data?.session?.id, 'voz', VOICE_MODEL, 'backend', BACKEND_MODEL);
-      return json(res, 201, { id: data?.session?.id, sdp: data?.transport?.sdp });
+      const expressionBridgeSession = expressionBridge.registerSession(data?.session?.id);
+      return json(res, 201, { id: data?.session?.id, sdp: data?.transport?.sdp, expressionBridge: expressionBridgeSession });
     } catch (e) {
       console.error('[live] exceção', e);
       return json(res, 502, { error: String(e?.message || e) });
@@ -140,6 +147,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 function safeJson(t) { try { return JSON.parse(t); } catch { return t; } }
+
+server.once('close', () => expressionBridge.close());
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`Ava Voice em http://localhost:${PORT}  (voz ${VOICE_MODEL} · backend ${BACKEND_MODEL})`);
