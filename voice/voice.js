@@ -4,6 +4,7 @@
  * Estados do orbe: full-duplex, então a prioridade é: Ava falando > usuário falando > backend trabalhando > ouvindo.
  */
 import { createExpressionController, connectExpressionEvents } from './expression-client.mjs';
+import { renderTranscriptText } from './transcript-links.mjs';
 
 (function () {
   'use strict';
@@ -48,9 +49,10 @@ import { createExpressionController, connectExpressionEvents } from './expressio
       var name = document.createElement('span'); name.className = 'who'; name.textContent = who === 'user' ? 'Jean' : 'Ava';
       var txt = document.createElement('span'); txt.className = 'txt';
       row.appendChild(name); row.appendChild(txt); transcript.appendChild(row);
-      current = { who: who, el: txt };
+      current = { who: who, el: txt, text: '' };
     }
-    current.el.textContent += delta;
+    current.text += delta;
+    renderTranscriptText(current.el, current.text);
     transcript.scrollTop = transcript.scrollHeight;
   }
   function note(text, kind) {

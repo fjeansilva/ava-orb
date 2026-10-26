@@ -25,6 +25,7 @@ const STATIC = {
   '/index.html': ['index.html', 'text/html; charset=utf-8'],
   '/voice.js': ['voice.js', 'text/javascript; charset=utf-8'],
   '/expression-client.mjs': ['expression-client.mjs', 'text/javascript; charset=utf-8'],
+  '/transcript-links.mjs': ['transcript-links.mjs', 'text/javascript; charset=utf-8'],
   '/jelly-orb.js': ['../jelly-orb.js', 'text/javascript; charset=utf-8'],
   '/plasma-orb.js': ['../plasma-orb.js', 'text/javascript; charset=utf-8'],
   '/glass-orb.js': ['../glass-orb.js', 'text/javascript; charset=utf-8'],
@@ -90,6 +91,9 @@ function sessionConfig(sdp) {
         "Relay the result naturally without inventing actions or capabilities.",
         "For requests to change your facial expression, delegate to the backend's set_expression tool.",
         "Only report an expression change after the backend confirms it; do not repeatedly delegate the same change.",
+        "Delegate current date and time questions to get_local_time, and web research or current facts to web_search in the backend.",
+        "Do not guess the current time or claim you searched before receiving the backend result.",
+        "Preserve source URLs supplied by the backend in your text transcript, next to the claims they support. Mention source names naturally when speaking.",
       ].join("\n"),
       audio: {
         output: {

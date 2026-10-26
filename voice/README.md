@@ -37,7 +37,13 @@ The first environment file supplies AVA's Pi model settings; the second supplies
 | `AVA_ORB_BRIDGE_TOKEN` | Unset | Shared server credential enabling expression commands. |
 | `AVA_ORB_BRIDGE_URL` | `http://127.0.0.1:3000` | Used by the Pi backend; change it if the Orb port changes. |
 
-The commented Responses-delegation example in `server.mjs` is inactive. `AVA_BACKEND_MODEL` does not select the current Pi model; use `AVA_MODEL_PROVIDER` and `AVA_MODEL_ID` in the assistant project. Web search and local-time tools are not enabled by this change.
+The commented Responses-delegation example in `server.mjs` is inactive. `AVA_BACKEND_MODEL` does not select the current Pi model; use `AVA_MODEL_PROVIDER` and `AVA_MODEL_ID` in the assistant project. The matching `feat/web-search-local-time` backend enables `get_local_time` and `web_search` as native Pi tools.
+
+## Time and web search
+
+The Orb delegates current date/time questions and web research to the Pi backend. `get_local_time` reads a fresh timestamp in `America/Sao_Paulo`. `web_search` makes a separate OpenAI Responses request with hosted search, using the backend's `OPENAI_API_KEY` and `AVA_WEB_SEARCH_MODEL` (default `gpt-6-astra`). Search incurs model/search API usage and does not depend on `AVA_ORB_BRIDGE_TOKEN`.
+
+Restart both applications, reload the browser, and start a new call. Ask "Ava, use get_local_time e me diga a hora em São Paulo" or "Ava, pesquise uma notícia recente sobre exploração espacial e cite a fonte". Source URLs relayed by GPT-Live are clickable in the transcript; HTML from transcripts is never interpreted. Link presence depends on GPT-Live preserving the backend's citations. These two new live flows still need manual validation.
 
 ## Expression flow
 
@@ -75,9 +81,11 @@ Acknowledgement confirms a call to the Orb rendering API, not that the user saw 
 From the Orb repository root:
 
 ```sh
-node --test voice/expression.test.mjs
+node --test voice/*.test.mjs
 ```
 
 Five tests cover authentication, session isolation, acknowledgement, invalid input, timeout, browser disconnect, duration, and browser cleanup. They use local HTTP/SSE and injected rendering callbacks, without calling OpenAI or requesting microphone access. A cross-project integration smoke test also exercised the Pi tool through the real local HTTP/SSE transport.
 
 On 2026-10-12, the owner followed the voice test above and confirmed that `set_expression` worked in a live call. This is owner-reported manual validation, separate from the automated checks.
+
+Three additional tests cover transcript links: safe Markdown/bare-URL rendering, text accumulated across deltas, and unsupported URL schemes. The Orb suite now has eight tests.
