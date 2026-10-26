@@ -2,31 +2,66 @@
 
 The browser handles microphone input, WebRTC audio, transcripts, and the Orb. The local server creates GPT-Live sessions with client delegation. The separate `ava-personal-assistant` application attaches to the Live session and runs delegated requests through Pi.
 
-## Run
+## Starting Ava
 
-Use Node.js 24 and a browser with microphone access. Create `voice/.env` with:
+Ava runs as two local processes: this Orb server (voice, browser, expressions) and the Pi backend in the `ava-personal-assistant` repository (reasoning and tools). The backend attaches to one specific Live call, so start it after each new call.
+
+### Prerequisites
+
+- Node.js 24 and a browser with microphone access.
+- A local checkout of `ava-personal-assistant` with `npm install` run, on a branch that includes the voice tools (`feat/web-search-local-time` or later).
+- A Pi provider configured with credentials through Pi. The assistant's `.env` selects it:
+
+  ```dotenv
+  AVA_MODEL_PROVIDER=your-provider
+  AVA_MODEL_ID=your-model-id
+  AVA_MODEL_THINKING_LEVEL=medium
+  ```
+
+### One-time setup
+
+Create `voice/.env` in this repository:
 
 ```dotenv
 OPENAI_API_KEY=your_openai_api_key
 AVA_ORB_BRIDGE_TOKEN=your_random_private_bridge_token
 ```
 
-Generate a separate random bridge token with at least 32 bytes of entropy. A token was configured in the local environment during implementation; it is not committed. Never use the OpenAI API key as the bridge token. The browser receives neither value.
+Generate the bridge token separately, for example with `openssl rand -hex 32` (at least 32 bytes of entropy). Never reuse the OpenAI API key as the bridge token. The browser receives neither value, and `.env` is not committed.
 
-From this directory:
+### Each session
 
-```sh
-node --env-file=.env server.mjs
-```
+1. **Start the Orb server.** From `voice/`:
 
-Open `http://localhost:3000`, start a new voice call, and use its Live session ID when starting the Pi backend. From the `ava-personal-assistant` repository:
+   ```sh
+   node --env-file=.env server.mjs
+   ```
 
-```sh
-npm run build
-node --env-file=.env --env-file=/absolute/path/to/ava-orb/voice/.env dist/voice-preview.js "<LIVE_SESSION_ID>"
-```
+   It prints `Ava Voice em http://localhost:3000`.
 
-The first environment file supplies AVA's Pi model settings; the second supplies the Live API key and shared Orb bridge token. Configure Pi provider credentials separately through Pi. Both applications must use the corresponding `feat/orb-set-expression` implementation for the expression tool to work.
+2. **Start a call.** Open `http://localhost:3000`, allow the microphone, and start the call. Wait for "Conectada. Pode falar." The server terminal prints the call's ID as `[live] sessão <LIVE_SESSION_ID> …`.
+
+3. **Attach the Pi backend.** From the `ava-personal-assistant` repository, with the call still open:
+
+   ```sh
+   npm run build
+   node --env-file=.env --env-file=/absolute/path/to/ava-orb/voice/.env dist/voice-preview.js "<LIVE_SESSION_ID>"
+   ```
+
+   The first file supplies the Pi model settings. The second supplies the same `OPENAI_API_KEY` as the Live session and the shared bridge token. On success it prints `Voice Pi session:` and `Session file:`.
+
+4. **Talk to Ava.** Delegated requests (time, web search, expressions) now run through Pi. Try "Ava, que horas são em São Paulo?"
+
+To end, stop the call in the browser, then stop the backend with Ctrl+C. A new call has a new Live session ID, so repeat steps 2 and 3. A backend attached to an ended call cannot be reused.
+
+Troubleshooting:
+
+- **Delegated requests get no answer:** check that the backend is running and was started with the current call's ID.
+- **The backend exits with a 503:** retry later, or start a new call and use its ID.
+- **Expressions do not change:** `AVA_ORB_BRIDGE_TOKEN` is missing or differs between the two processes. Restart both and start a new call.
+- **The server exits with "OPENAI_API_KEY não definida":** run it with `--env-file=.env` from `voice/`.
+
+### Configuration
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
